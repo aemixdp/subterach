@@ -2,9 +2,9 @@
   "name": "subterach",
   "version": "1.0.0",
   "description": "Administrative bot for plug.dj/subterach",
-  "main": "server.js",
+  "main": " --harmony_generators --harmony_arrow_functions server.js",
   "scripts": {
-    "server": "node --harmony_generators --harmony_arrow_functions .\\server.js"
+    "start": "node --harmony_generators --harmony_arrow_functions .\\server.js"
   },
   "author": "aemxdp <aemxdp@gmail.com>",
   "license": "MIT",

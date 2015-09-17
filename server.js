@@ -4,11 +4,14 @@ var Discogs = require('disconnect').Client;
 var Plug = require('plugapi');
 var YouTube = require('youtube-node');
 var soundcloud = require('node-soundcloud');
+var express = require('express')();
 var chalk = require('chalk');
 var util = require('util');
 var _ = require('lodash');
 
 var CONFIG = require('./conf.js');
+var PORT = process.env.OPENSHIFT_NODEJS_PORT || 8080;
+var IP = process.env.OPENSHIFT_NODEJS_IP || "127.0.0.1";
 
 var bot;
 var lcsBuffer = new Uint8Array(10000)
@@ -59,6 +62,7 @@ var onAdvance = Promise.coroutine(function* (data) {
         bot.moderateRemoveDJ(bot.getDJ().id);
         return;
     }
+    var wrongCategory = false;
     var cid = data.media.cid;
     var title;
     if (isNaN(+cid)) {
@@ -75,12 +79,7 @@ var onAdvance = Promise.coroutine(function* (data) {
         }
         logger.info(util.format('YouTube tags for %s: %j', title, snippet.tags));
         if (snippet.categoryId != '10') {
-            logger.info(util.format(
-                'Skipping "%s" due to YouTube video category id mismatch (non music): %s', title, snippet.categoryId
-            ));
-            bot.sendChat('Сорян, видос относится к неподходящей категории');
-            bot.moderateRemoveDJ(bot.getDJ().id);
-            return;
+            wrongCategory = true;
         }
         var forbiddenTag = _.find(snippet.tags, tag =>
             _.any(CONFIG.YOUTUBE_SKIPPED_TAGS, skippedTag =>
@@ -140,6 +139,14 @@ var onAdvance = Promise.coroutine(function* (data) {
         }
         bot.woot();
     } else {
+        if (wrongCategory) {
+            logger.info(util.format(
+                'Skipping "%s" due to YouTube video category id mismatch (non music): %s', title, snippet.categoryId
+            ));
+            bot.sendChat('Сорян, видос относится к неподходящей категории');
+            bot.moderateRemoveDJ(bot.getDJ().id);
+            return;
+        }
         logger.warn('No data found for "%s" at Discogs', title);
     }
 });
@@ -235,7 +242,11 @@ function timestamp () {
 }
 
 function guessArtist (title) {
-    return title.substr(0, title.indexOf(' - '));
+    title = cleanTitle(title);
+    var sepIndex = title.indexOf(' - ');
+    if (sepIndex == -1) sepIndex = title.indexOf('- ');
+    if (sepIndex == -1) sepIndex = title.indexOf(': ');
+    return title.substr(0, sepIndex);
 }
 
 function lcsLength (a, b) {
@@ -276,3 +287,6 @@ bot.on('close', () => bot.connect(CONFIG.ROOM));
 bot.on('error', () => bot.connect(CONFIG.ROOM));
 
 bot.connect(CONFIG.ROOM);
+
+express.get('/', (req, res) => res.status(200).send(')))'));
+express.listen(PORT, IP);
