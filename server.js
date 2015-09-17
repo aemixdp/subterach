@@ -44,7 +44,6 @@ function twoArgPromisifier (fn) {
         return new Promise((resolve, reject) => {
             args.push((err, res) => {
                 if (err) {
-                    console.log('2arg p error:', err);
                     reject(err);
                 } else resolve(res);
             });
@@ -64,12 +63,20 @@ var onAdvance = Promise.coroutine(function* (data) {
     var title;
     if (isNaN(+cid)) {
         var youtubeResults = yield youtube.getByIdAsync(cid);
-        var snippet = youtubeResults.items[0].snippet;
+        var item = youtubeResults.items[0];
+        var status = item.status;
+        var snippet = item.snippet;
         title = snippet.title.trim();
-        logger.info(util.format('Youtube tags for %s: %j', title, snippet.tags));
+        if (!status.embeddable) {
+            logger.info('Skipping "%s" due to not being embeddable', title);
+            bot.sendChat('Нефартануло, видос не разрешён для встраивания');
+            bot.moderateForceSkip();
+            return;
+        }
+        logger.info(util.format('YouTube tags for %s: %j', title, snippet.tags));
         if (snippet.categoryId != '10') {
             logger.info(util.format(
-                'Skipping "%s" due to youtube video category id mismatch (non music)', title
+                'Skipping "%s" due to YouTube video category id mismatch (non music): %s', title, snippet.categoryId
             ));
             bot.sendChat('Сорян, видос относится к неподходящей категории');
             bot.moderateRemoveDJ(bot.getDJ().id);
@@ -82,7 +89,7 @@ var onAdvance = Promise.coroutine(function* (data) {
         );
         if (forbiddenTag) {
             logger.info(util.format(
-                'Skipping "%s" due to youtube match in following tag: %s', title, forbiddenTag
+                'Skipping "%s" due to YouTube match in following tag: %s', title, forbiddenTag
             ));
             bot.sendChat(util.format('Сорян, обнаружен неподходящий тэг: %s', forbiddenTag));
             bot.moderateRemoveDJ(bot.getDJ().id);
@@ -91,12 +98,13 @@ var onAdvance = Promise.coroutine(function* (data) {
     } else {
         var soundcloudResult = yield soundcloud.getAsync('/tracks/' + cid);
         title = soundcloudResult.title.trim();
+        logger.info(util.format('SoundCloud tags for %s: %s', title, soundcloudResult.tag_list));
         var forbiddenTag = _.find(CONFIG.YOUTUBE_SKIPPED_TAGS, skippedTag =>
             soundcloudResult.tag_list.toLowerCase().indexOf(skippedTag) != -1
         );
         if (forbiddenTag) {
             logger.info(util.format(
-                'Skipping "%s" due to soundcloud match in following tag: %s', title, forbiddenTag
+                'Skipping "%s" due to SoundCloud match in following tag: %s', title, forbiddenTag
             ));
             bot.sendChat(util.format('Сорян, обнаружен неподходящий тэг: %s', forbiddenTag));
             bot.moderateRemoveDJ(bot.getDJ().id);
@@ -117,17 +125,20 @@ var onAdvance = Promise.coroutine(function* (data) {
         var matchSkippedStyles = _.intersection(bestMatchingRelease.style, CONFIG.DISCOGS_SKIPPED_STYLES);
         if (matchSkippedGenres.length > 0) {
             logger.info(util.format(
-                'Skipping "%s" due to discogs matches in following genres: %j', title, matchSkippedGenres
+                'Skipping "%s" due to Discogs matches in following genres: %j', title, matchSkippedGenres
             ));
             bot.sendChat(util.format('Сорян, обнаружены неподходящие жанры: %s', matchSkippedGenres));
             bot.moderateRemoveDJ(bot.getDJ().id);
+            return;
         } else if (matchSkippedStyles.length > 0) {
             logger.info(util.format(
-                'Skipping "%s" due to discogs matches in following styles: %j', title, matchSkippedStyles
+                'Skipping "%s" due to Discogs matches in following styles: %j', title, matchSkippedStyles
             ));
             bot.sendChat(util.format('Сорян, обнаружены неподходящие стили: %s', matchSkippedStyles));
             bot.moderateRemoveDJ(bot.getDJ().id);
+            return;
         }
+        bot.woot();
     } else {
         logger.warn('No data found for "%s" at Discogs', title);
     }
