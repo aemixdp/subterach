@@ -1,0 +1,23 @@
+{
+  "name": "subterach",
+  "version": "1.0.0",
+  "description": "Administrative bot for plug.dj/subterach",
+  "main": "server.js",
+  "scripts": {
+    "server": "node --harmony_generators --harmony_arrow_functions .\\server.js"
+  },
+  "author": "aemxdp <aemxdp@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "bluebird": "^2.10.0",
+    "chalk": "^1.1.1",
+    "disconnect": "^0.6.7",
+    "express": "^4.13.3",
+    "fast-levenshtein": "^1.0.7",
+    "lodash": "^3.10.1",
+    "node-soundcloud": "0.0.3",
+    "plugapi": "^4.2.0",
+    "winston": "^1.0.1",
+    "youtube-node": "^1.3.0"
+  }
+}
