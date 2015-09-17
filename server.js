@@ -285,6 +285,13 @@ bot = new Plug({
 bot.on('advance', onAdvance);
 bot.on('close', () => bot.connect(CONFIG.ROOM));
 bot.on('error', () => bot.connect(CONFIG.ROOM));
+bot.on('roomJoin', () => {
+    setInterval(() => {
+        if (bot.getTimeRemaining() == 0) {
+            bot.moderateForceSkip();
+        }
+    }, 3000);
+});
 
 bot.connect(CONFIG.ROOM);
 
