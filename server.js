@@ -214,6 +214,7 @@ function cleanTitle (string) {
         }
     }
     return newString
+        .replace(/official\s*music\s*video/gi, '')
         .replace(/official\s*video/gi, '')
         .replace(/official/gi, '')
         .replace(/full\s*album/gi, '')
@@ -222,7 +223,7 @@ function cleanTitle (string) {
         .replace(/live in.*/gi, '')
         .replace(/(^|[^A-Za-z])hd([^A-Za-z]|$)/gi, '')
         .replace(/(^|[^A-Za-z])hq([^A-Za-z]|$)/gi, '')
-        .replace(/(\d+)p/gi, '');
+        .replace(/(^|[^A-Za-z0-9])(\d+)p/gi, '');
 }
 
 function strCutSpaces (string) {
@@ -244,9 +245,12 @@ function timestamp () {
 function guessArtist (title) {
     title = cleanTitle(title);
     var sepIndex = title.indexOf(' - ');
-    if (sepIndex == -1) sepIndex = title.indexOf('- ');
+    if (sepIndex == -1) sepIndex = title.indexOf(' _ ');
     if (sepIndex == -1) sepIndex = title.indexOf(': ');
-    return title.substr(0, sepIndex);
+    if (sepIndex == -1) sepIndex = title.indexOf('. ');
+    if (sepIndex == -1) sepIndex = title.indexOf('_ ');
+    if (sepIndex == -1) sepIndex = title.indexOf('- ');
+    return sepIndex == -1 ? title : title.substr(0, sepIndex);
 }
 
 function lcsLength (a, b) {
