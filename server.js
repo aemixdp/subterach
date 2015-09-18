@@ -150,6 +150,7 @@ var onAdvance = Promise.coroutine(function* (data) {
             return;
         }
         logger.warn('No data found for "%s" at Discogs', title);
+        lastReleaseUrl = null;
     }
 });
 
