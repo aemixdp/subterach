@@ -4,7 +4,8 @@
   "description": "Administrative bot for plug.dj/subterach",
   "main": " --harmony_generators --harmony_arrow_functions server.js",
   "scripts": {
-    "start": "node --harmony_generators --harmony_arrow_functions .\\server.js"
+    "start": "node --harmony_generators --harmony_arrow_functions .\\server.js",
+    "sandbox": "node --harmony_generators --harmony_arrow_functions .\\sandbox.js"
   },
   "author": "aemxdp <aemxdp@gmail.com>",
   "license": "MIT",

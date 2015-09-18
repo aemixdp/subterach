@@ -14,6 +14,7 @@ var PORT = process.env.OPENSHIFT_NODEJS_PORT || 8080;
 var IP = process.env.OPENSHIFT_NODEJS_IP || "127.0.0.1";
 
 var bot;
+var lastReleaseUrl;
 var lcsBuffer = new Uint8Array(10000)
 var youtube = new YouTube();
 var discogs = new Discogs({
@@ -137,6 +138,7 @@ var onAdvance = Promise.coroutine(function* (data) {
             bot.moderateRemoveDJ(bot.getDJ().id);
             return;
         }
+        lastReleaseUrl = bestMatchingRelease.url;
         bot.woot();
     } else {
         if (wrongCategory) {
@@ -150,6 +152,14 @@ var onAdvance = Promise.coroutine(function* (data) {
         logger.warn('No data found for "%s" at Discogs', title);
     }
 });
+
+function onChat (data) {
+    if (data.type != 'message') return;
+    if (data.message.trim() == '!r' && lastReleaseUrl) {
+        bot.sendChat(lastReleaseUrl);
+        lastReleaseUrl = null;
+    }
+}
 
 function discogsFuzzySearch (query) {
     var queryArtist = guessArtist(query);
@@ -174,6 +184,7 @@ function discogsFuzzySearch (query) {
             return {
                 genre: entry.genre,
                 style: entry.style,
+                url: release.uri,
                 tracks: _.map(tracklist, entry =>
                     (entry.artists ? joinArtists(entry.artists) : releaseArtists) + ' - ' + entry.title
                 )
@@ -287,6 +298,7 @@ bot = new Plug({
 });
 
 bot.on('advance', onAdvance);
+bot.on('chat', onChat);
 bot.on('close', () => bot.connect(CONFIG.ROOM));
 bot.on('error', () => bot.connect(CONFIG.ROOM));
 bot.on('roomJoin', () => {
