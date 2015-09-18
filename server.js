@@ -175,7 +175,11 @@ function discogsFuzzySearch (query) {
                 if (r.lcsLen > maxLcsLen)
                     maxLcsLen = r.lcsLen;
             });
-            return _.filter(response.results, r => r.lcsLen == maxLcsLen).slice(0, 2);
+            return _
+                .filter(response.results, r =>
+                    r.lcsLen == maxLcsLen ||
+                    guessArtist(r.title) == 'Various')
+                .slice(0, 3);
         })
         .then(entries => _.uniq(_.flatten(entries), e => e.id))
         .map(entry => discogs.releaseAsync(entry.id).then(release => {
