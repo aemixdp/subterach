@@ -261,9 +261,11 @@ function guessArtist (title) {
     title = cleanTitle(title);
     var sepIndex = title.indexOf(' - ');
     if (sepIndex == -1) sepIndex = title.indexOf(' _ ');
+    if (sepIndex == -1) sepIndex = title.indexOf(' | ');
     if (sepIndex == -1) sepIndex = title.indexOf(': ');
     if (sepIndex == -1) sepIndex = title.indexOf('. ');
     if (sepIndex == -1) sepIndex = title.indexOf('_ ');
+    if (sepIndex == -1) sepIndex = title.indexOf('| ');
     if (sepIndex == -1) sepIndex = title.indexOf('- ');
     return sepIndex == -1 ? title : title.substr(0, sepIndex);
 }
