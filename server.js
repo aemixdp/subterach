@@ -121,6 +121,7 @@ var onAdvance = Promise.coroutine(function* (data) {
                 return lcslen;
             })
         ));
+        lastReleaseUrl = bestMatchingRelease.url;
         var matchSkippedGenres = _.intersection(bestMatchingRelease.genre, CONFIG.DISCOGS_SKIPPED_GENRES);
         var matchSkippedStyles = _.intersection(bestMatchingRelease.style, CONFIG.DISCOGS_SKIPPED_STYLES);
         if (matchSkippedGenres.length > 0) {
@@ -138,7 +139,6 @@ var onAdvance = Promise.coroutine(function* (data) {
             bot.moderateRemoveDJ(bot.getDJ().id);
             return;
         }
-        lastReleaseUrl = bestMatchingRelease.url;
         bot.woot();
     } else {
         if (wrongCategory) {
@@ -157,7 +157,6 @@ function onChat (data) {
     if (data.type != 'message') return;
     if (data.message.trim() == '!r' && lastReleaseUrl) {
         bot.sendChat(lastReleaseUrl);
-        lastReleaseUrl = null;
     }
 }
 
@@ -306,7 +305,7 @@ bot.on('roomJoin', () => {
         if (bot.getTimeRemaining() == 0) {
             bot.moderateForceSkip();
         }
-    }, 3000);
+    }, 5000);
 });
 
 bot.connect(CONFIG.ROOM);
