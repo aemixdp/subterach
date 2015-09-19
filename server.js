@@ -1,5 +1,6 @@
 var Promise = require('bluebird');
 var Winston = require('winston');
+var Google = require('googleapis').customsearch('v1');
 var Discogs = require('disconnect').Client;
 var Plug = require('plugapi');
 var YouTube = require('youtube-node');
@@ -45,12 +46,12 @@ function twoArgPromisifier (fn) {
     return function () {
         var args = [].slice.call(arguments);
         var self = this;
-        var retryTimes = 10;
+        var retryTimes = 20;
         return new Promise((resolve, reject) => {
             args.push((err, res) => {
                 if (err) {
                     if (retryTimes > 0) {
-                        logger.warn('Promise failure: %s', err);
+                        logger.warn(util.format('Promise failure: %j', err));
                         retryTimes--;
                         fn.apply(self, args);
                     } else {
@@ -87,7 +88,8 @@ var onAdvance = Promise.coroutine(function* (data) {
             bot.moderateForceSkip();
             return;
         }
-        logger.info(util.format('YouTube tags for %s: %j', title, snippet.tags));
+        logger.info(util.format('YouTube tags for "%s": %j', title, snippet.tags));
+        title = title.toLowerCase()
         if (snippet.categoryId != '10') {
             wrongCategory = true;
         }
@@ -106,7 +108,7 @@ var onAdvance = Promise.coroutine(function* (data) {
         }
     } else {
         var soundcloudResult = yield soundcloud.getAsync('/tracks/' + cid);
-        title = soundcloudResult.title.trim();
+        title = soundcloudResult.title.trim().toLowerCase();
         logger.info(util.format('SoundCloud tags for %s: %s', title, soundcloudResult.tag_list));
         var forbiddenTag = _.find(CONFIG.YOUTUBE_SKIPPED_TAGS, skippedTag =>
             soundcloudResult.tag_list.toLowerCase().indexOf(skippedTag) != -1
@@ -123,24 +125,36 @@ var onAdvance = Promise.coroutine(function* (data) {
     var discogsResults = yield discogsFuzzySearch(title);
     if (discogsResults.length > 0) {
         logger.info('* Computing LCS lengths for "%s":', title);
-        var bestMatchingRelease = _.max(discogsResults, release => _.max(
-            _.map(release.tracks, trackTitle => {
-                var lcslen = lcsLength(title, trackTitle);
-                logger.info('| "%s" = %d', trackTitle, lcslen);
-                return lcslen;
-            })
-        ));
+        var bestMatchingRelease;
+        var bestMatchingTrack;
+        var maxLcsLen = 0;
+        _.each(discogsResults, release => {
+            _.each(release.tracks, trackTitle => {
+                var lcsLen = lcsLength(title, trackTitle);
+                logger.info('| "%s" = %d', trackTitle, lcsLen);
+                if (lcsLen > maxLcsLen) {
+                    maxLcsLen = lcsLen;
+                    bestMatchingRelease = release;
+                    bestMatchingTrack = trackTitle;
+                }
+            });
+        });
         lastReleaseUrl = bestMatchingRelease.url;
         var matchSkippedGenres = _.intersection(bestMatchingRelease.genre, CONFIG.DISCOGS_SKIPPED_GENRES);
         var matchSkippedStyles = _.intersection(bestMatchingRelease.style, CONFIG.DISCOGS_SKIPPED_STYLES);
-        if (matchSkippedGenres.length > 0) {
+        var artist = guessArtist(title);
+        var bestMatchingTrackArtist = guessArtist(bestMatchingTrack);
+        var artistRelevance = lcsLength(artist, bestMatchingTrackArtist) /
+            Math.max(artist.length, bestMatchingTrackArtist.length);
+        logger.info('Artist relevance = ' + artistRelevance);
+        if (matchSkippedGenres.length > 0 && artistRelevance > 0.66) {
             logger.info(util.format(
                 'Skipping "%s" due to Discogs matches in following genres: %j', title, matchSkippedGenres
             ));
             bot.sendChat(util.format('Сорян, обнаружены неподходящие жанры: %s', matchSkippedGenres));
             bot.moderateRemoveDJ(bot.getDJ().id);
             return;
-        } else if (matchSkippedStyles.length > 0) {
+        } else if (matchSkippedStyles.length > 0 && artistRelevance > 0.66) {
             logger.info(util.format(
                 'Skipping "%s" due to Discogs matches in following styles: %j', title, matchSkippedStyles
             ));
@@ -148,7 +162,9 @@ var onAdvance = Promise.coroutine(function* (data) {
             bot.moderateRemoveDJ(bot.getDJ().id);
             return;
         }
-        bot.woot();
+        if (artistRelevance >= 0.5) {
+            bot.woot();
+        }
     } else {
         if (wrongCategory) {
             logger.info(util.format(
@@ -172,35 +188,51 @@ function onChat (data) {
 
 function discogsFuzzySearch (query) {
     var queryArtist = guessArtist(query);
-    return Promise.all([
+    var cleanQuery = cleanTitle(query);
+    return Promise.join(
         discogs.searchAsync(query, { type: 'release' }),
-        discogs.searchAsync(cleanTitle(query), { type: 'release' })
-    ])
-        .then(responses => _.filter(responses, r => r.results.length > 0))
-        .map(response => {
+        discogs.searchAsync(cleanQuery, { type: 'release' }),
+        Google.cse.listAsync({
+            auth: CONFIG.GOOGLE_API_KEY,
+            cx: CONFIG.GOOGLE_CX,
+            q: cleanQuery
+        }),
+        (discogsResponse1, discogsResponse2, googleResponse) => {
             var maxLcsLen = 0;
-            _.each(response.results, r => {
-                r.lcsLen = lcsLength(queryArtist, guessArtist(r.title));
-                if (r.lcsLen > maxLcsLen)
-                    maxLcsLen = r.lcsLen;
+            var calcLcsLengths = (r) => {
+                r.artist = guessArtist(r.title).toLowerCase();
+                r.lcsLen = lcsLength(queryArtist, r.artist);
+                if (r.lcsLen > maxLcsLen) maxLcsLen = r.lcsLen;
+            };
+            var discogsResults = discogsResponse1.results.concat(discogsResponse2.results);
+            var googleResults = _.filter(googleResponse.items, r =>
+                r.link.indexOf('/release/') != -1);
+            _.each(discogsResults, calcLcsLengths);
+            _.each(googleResults, r => {
+                calcLcsLengths(r);
+                r.id = +(r.link.substr(r.link.lastIndexOf('/') + 1));
             });
             return _
-                .filter(response.results, r =>
+                .filter(discogsResults.concat(googleResults), r =>
                     r.lcsLen == maxLcsLen ||
-                    guessArtist(r.title) == 'Various')
-                .slice(0, 3);
-        })
-        .then(entries => _.uniq(_.flatten(entries), e => e.id))
+                    r.artist == 'various')
+                .slice(0, 4);
+        }
+    )
+        .then(entries => _.uniq(entries, e => e.id))
         .map(entry => discogs.releaseAsync(entry.id).then(release => {
-            var releaseArtists = joinArtists(release.artists);
+            var releaseArtistString = joinArtists(release.artists);
             var tracklist = _.filter(release.tracklist, t => t.title && t.title.trim().length > 0);
             return {
-                genre: entry.genre,
-                style: entry.style,
+                genre: release.genres,
+                style: release.styles,
                 url: release.uri,
-                tracks: _.map(tracklist, entry =>
-                    (entry.artists ? joinArtists(entry.artists) : releaseArtists) + ' - ' + entry.title
-                )
+                tracks: _.map(tracklist, entry => {
+                    var artistString = entry.artists
+                        ? joinArtists(entry.artists)
+                        : releaseArtistString;
+                    return (artistString + ' - ' + entry.title).toLowerCase();
+                })
             };
         }));
 }
@@ -261,6 +293,7 @@ function timestamp () {
 function guessArtist (title) {
     title = cleanTitle(title);
     var sepIndex = title.indexOf(' - ');
+    if (sepIndex == -1) sepIndex = title.indexOf(' – ');
     if (sepIndex == -1) sepIndex = title.indexOf(' _ ');
     if (sepIndex == -1) sepIndex = title.indexOf(' | ');
     if (sepIndex == -1) sepIndex = title.indexOf(': ');
@@ -268,6 +301,7 @@ function guessArtist (title) {
     if (sepIndex == -1) sepIndex = title.indexOf('_ ');
     if (sepIndex == -1) sepIndex = title.indexOf('| ');
     if (sepIndex == -1) sepIndex = title.indexOf('- ');
+    if (sepIndex == -1) sepIndex = title.indexOf('– ');
     return sepIndex == -1 ? title : title.substr(0, sepIndex);
 }
 
@@ -290,12 +324,13 @@ function lcsLength (a, b) {
     return lcsBuffer[(m + 1) * (n + 1) - 1];
 }
 
-youtube.setKey(CONFIG.YOUTUBE_API_KEY);
+youtube.setKey(CONFIG.GOOGLE_API_KEY);
 soundcloud.init({ id: CONFIG.SOUNDCLOUD_CLIENT_ID });
 
 Promise.promisifyAll(discogs, { promisifier: twoArgPromisifier });
 Promise.promisifyAll(youtube, { promisifier: twoArgPromisifier });
 Promise.promisifyAll(soundcloud, { promisifier: twoArgPromisifier });
+Promise.promisifyAll(Google.cse, { promisifier: twoArgPromisifier });
 
 Plug.prototype.setLogger(logger);
 
