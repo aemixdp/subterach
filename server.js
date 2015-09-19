@@ -45,11 +45,20 @@ function twoArgPromisifier (fn) {
     return function () {
         var args = [].slice.call(arguments);
         var self = this;
+        var retryTimes = 10;
         return new Promise((resolve, reject) => {
             args.push((err, res) => {
                 if (err) {
-                    reject(err);
-                } else resolve(res);
+                    if (retryTimes > 0) {
+                        logger.warn('Promise failure: %s', err);
+                        retryTimes--;
+                        fn.apply(self, args);
+                    } else {
+                        reject(err);
+                    }
+                } else {
+                    resolve(res);
+                }
             });
             fn.apply(self, args);
         });
@@ -193,15 +202,7 @@ function discogsFuzzySearch (query) {
                     (entry.artists ? joinArtists(entry.artists) : releaseArtists) + ' - ' + entry.title
                 )
             };
-        }))
-        .catch(retry('discogsFuzzySearch', arguments));
-}
-
-function retry (label, args) {
-    return function (e) {
-        logger.error('Error during `%s`, retrying...', label);
-        return args.callee.apply(this, args);
-    };
+        }));
 }
 
 function joinArtists (artists) {
