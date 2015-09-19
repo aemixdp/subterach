@@ -16,6 +16,7 @@ var IP = process.env.OPENSHIFT_NODEJS_IP || "127.0.0.1";
 
 var bot;
 var lastReleaseUrl;
+var lastReleaseStyle;
 var lcsBuffer = new Uint8Array(10000)
 var youtube = new YouTube();
 var discogs = new Discogs({
@@ -140,6 +141,7 @@ var onAdvance = Promise.coroutine(function* (data) {
             });
         });
         lastReleaseUrl = bestMatchingRelease.url;
+        lastReleaseStyle = bestMatchingRelease.style;
         var matchSkippedGenres = _.intersection(bestMatchingRelease.genre, CONFIG.DISCOGS_SKIPPED_GENRES);
         var matchSkippedStyles = _.intersection(bestMatchingRelease.style, CONFIG.DISCOGS_SKIPPED_STYLES);
         var artist = guessArtist(title);
@@ -176,13 +178,17 @@ var onAdvance = Promise.coroutine(function* (data) {
         }
         logger.warn('No data found for "%s" at Discogs', title);
         lastReleaseUrl = null;
+        lastReleaseStyle = null;
     }
 });
 
 function onChat (data) {
     if (data.type != 'message') return;
-    if (data.message.trim() == '!r' && lastReleaseUrl) {
+    var msg = data.message.trim();
+    if (msg == '!r' && lastReleaseUrl) {
         bot.sendChat(lastReleaseUrl);
+    } else if (msg == '!s' && lastReleaseStyle) {
+        bot.sendChat(lastReleaseStyle.join(', '));
     }
 }
 
